@@ -1,40 +1,51 @@
+import os
 import discord
 import requests
+from discord.ext import commands
 
-# ---- Config ----
-DISCORD_TOKEN = "YOUR_DISCORD_BOT_TOKEN"
-DEEP_AI_KEY = "YOUR_DEEPAI_API_KEY"
+# ----------------- CONFIG -----------------
+# Use environment variables for security
+DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
+DEEP_AI_KEY = os.environ.get("DEEP_AI_KEY")
 
+if not DISCORD_TOKEN or not DEEP_AI_KEY:
+    raise ValueError("Missing DISCORD_TOKEN or DEEP_AI_KEY in environment variables.")
+
+# ----------------- INTENTS -----------------
 intents = discord.Intents.default()
 intents.messages = True
-intents.message_content = True  # needed for reading messages
+intents.message_content = True  # Needed to read message content
 
-client = discord.Client(intents=intents)
+# ----------------- BOT SETUP -----------------
+bot = commands.Bot(command_prefix="!", intents=intents)
 
-@client.event
+# ----------------- EVENTS -----------------
+@bot.event
 async def on_ready():
-    print(f'Logged in as {client.user}')
+    print(f"Bot is online as {bot.user}")
 
-@client.event
-async def on_message(message):
-    if message.author == client.user:
-        return
+# ----------------- COMMANDS -----------------
+@bot.command(name="ai", help="Generate AI text using DeepAI. Usage: !ai your prompt")
+async def ai(ctx, *, prompt: str):
+    await ctx.send("Thinking... 🤔")
 
-    # Command trigger, e.g., !ai
-    if message.content.startswith("!ai"):
-        prompt = message.content[len("!ai "):]  # get text after !ai
-        await message.channel.send("Thinking... 🤔")
-
-        # Send request to DeepAI API
+    try:
         response = requests.post(
             "https://api.deepai.org/api/text-generator",
-            data={'text': prompt},
-            headers={'api-key': DEEP_AI_KEY}
+            data={"text": prompt},
+            headers={"api-key": DEEP_AI_KEY},
+            timeout=15
         )
+        data = response.json()
+        ai_text = data.get("output", "No response from DeepAI.")
+    except Exception as e:
+        ai_text = f"Error contacting DeepAI API: {e}"
 
-        result = response.json()
-        ai_text = result.get('output', 'No response from AI.')
+    # Discord messages have a max length of 2000 chars
+    if len(ai_text) > 2000:
+        ai_text = ai_text[:1997] + "..."
 
-        await message.channel.send(ai_text)
+    await ctx.send(ai_text)
 
-client.run(DISCORD_TOKEN)
+# ----------------- RUN BOT -----------------
+bot.run(DISCORD_TOKEN)
